@@ -1,58 +1,76 @@
+use super::Binary;
+use super::Byte;
 
-type Byte = u8;
-type Binary = [Byte];
-type Result = std::result::Result<usize, ()>;
+pub type Result = std::result::Result<usize, ()>;
 
-pub fn token(input: &Binary, output: &mut Binary) -> Result  {
-  Generator { input, output, lookup: TOKEN_LOOKUP_TABLE }.generate()
+pub fn token(input: &Binary, output: &mut Binary) -> usize  {
+  generate(input, output, TOKEN_LOOKUP_TABLE)
 }
 
-pub fn word(input: &Binary, output: &mut Binary) -> Result {
-  Generator { input, output, lookup: WORD_LOOKUP_TABLE }.generate()
+pub fn word(input: &Binary, output: &mut Binary) -> usize {
+  generate(input, output, WORD_LOOKUP_TABLE)
 }
 
-
-struct Generator <'a, 'b> {
-  input: &'a Binary,
-  output: &'b mut Binary,
-  lookup: &'static Binary
+fn generate(input: &Binary, output: &mut Binary, lookup: &'static Binary) -> usize {
+  Hasher::new(input.into_iter(), lookup, 256)
+    .zip(output)
+    .fold(0, |cnt, (i, o)|{
+      *o = i;
+      cnt + 1
+    }
+  )
 }
 
-impl <'a, 'b> Generator <'a, 'b> {
+struct Hasher<'a, T>
+  where T : Iterator<Item=&'a Byte> {
+  input: T,
+  lookup: &'static Binary,
+  acc: usize,
+  multiplier: usize
+}
 
-  fn put(&mut self, i: &mut usize, acc: &mut usize) -> std::result::Result<(), ()> {
-    if *i >= self.output.len() {
-      Err(())
+impl<'a, T> Hasher<'a, T>
+  where T : Iterator<Item=&'a Byte>  {
+  fn new(input: T, lookup: &'static Binary, multiplier: usize) -> Hasher<'a, T> {
+    Hasher {
+      input,
+      lookup,
+      acc: 0,
+      multiplier
+    }
+  }
+
+  fn calculate(&mut self) -> u8 {
+    let ret = self.lookup[self.acc % self.lookup.len()];
+    self.acc /= self.lookup.len();
+    ret
+  }
+}
+
+impl<'a, T> Iterator for Hasher<'a, T>
+  where T : Iterator<Item=&'a Byte>  {
+  type Item = u8;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      if self.acc > self.lookup.len() {
+        return Some(self.calculate());
+      }
+
+      if let Some(i) = self.input.next() {
+        self.acc *= self.multiplier;
+        self.acc += *i as usize;
+      } else {
+        break;
+      }
+    }
+
+    if self.acc > 0 {
+      return Some(self.calculate())
     } else {
-      self.output[*i] = self.lookup[*acc % self.lookup.len()] as u8;
-      *acc /= self.lookup.len();
-      *i += 1;
-      Ok(())
+      None
     }
   }
-
-  fn generate(&mut self) -> Result {
-    let mut i = 0;
-
-    if !self.input.is_empty() {
-      let mut acc : usize = 0;
-      for x in self.input {
-        acc *= 256;
-        acc += *x as usize;
-
-        while acc > self.lookup.len() {
-          self.put(&mut i, &mut acc)?
-        }
-      }
-
-      while acc > 0 {
-        self.put(&mut i, &mut acc)?
-      }
-    }
-
-    Ok(i)
-  }
-
 }
 
 static TOKEN_LOOKUP_TABLE: &'static Binary = &[
@@ -96,8 +114,8 @@ mod tests {
 
   #[test]
   fn empty_test() {
-    assert_eq!(token(&[], &mut []), Ok(0));
-    assert_eq!(word(&[], &mut []), Ok(0));
+    assert_eq!(token(&[], &mut []), 0);
+    assert_eq!(word(&[], &mut []), 0);
   }
 
   fn is_token_char(ch: &u8) -> bool {
@@ -115,10 +133,9 @@ mod tests {
     for _ in 0..100 {
       let input: [u8; 30] = rand::random();
       let size = token(&input[..rnd.gen_range(1, 30)], &mut output);
-      assert!(size.is_ok());
-      assert!(size.unwrap() > 0);
-      println!("token is {}", String::from_utf8(output[0..size.unwrap()].to_vec()).unwrap());
-      output[0..size.unwrap()].into_iter().for_each(|ch| assert!(is_token_char(ch)));
+      assert!(size > 0);
+      println!("token is {}", String::from_utf8(output[0..size].to_vec()).unwrap());
+      output[0..size].into_iter().for_each(|ch| assert!(is_token_char(ch)));
     }
   }
 
@@ -129,20 +146,19 @@ mod tests {
     for _ in 0..100 {
       let input: [u8; 30] = rand::random();
       let size = word(&input[..rnd.gen_range(1, 30)], &mut output);
-      assert!(size.is_ok());
-      assert!(size.unwrap() > 0);
-      println!("word is {}", String::from_utf8(output[0..size.unwrap()].to_vec()).unwrap());
-      output[0..size.unwrap()].into_iter().for_each(|ch| assert!(is_word_char(ch)));
+      assert!(size > 0);
+      println!("word is {}", String::from_utf8(output[0..size].to_vec()).unwrap());
+      output[0..size].into_iter().for_each(|ch| assert!(is_word_char(ch)));
     }
   }
 
   #[test]
   fn output_is_not_enough_test() {
-    assert_eq!(token(&[1], &mut[]), Err(()));
-    assert_eq!(word(&[4, 6], &mut[]), Err(()));
+    assert_eq!(token(&[1], &mut[]), 0);
+    assert_eq!(word(&[4, 6], &mut[]), 0);
 
     let mut output = vec![0; 2];
-    assert_eq!(token(&[1, 3, 4], &mut output), Err(()));
-    assert_eq!(word(&[223, 45], &mut output), Err(()));
+    assert_eq!(token(&[1, 3, 4], &mut output), 2);
+    assert_eq!(word(&[223, 45], &mut output), 2);
   }
 }
