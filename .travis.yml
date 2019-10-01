@@ -1,5 +1,55 @@
 language: rust
+sudo: required
+dist: trusty
+
+rust:
+  - nightly
+  - beta
+  - stable
+matrix:
+  fast_finish: true
+
+
+cache:
+  apt: true
+  cargo: true
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+# Dependencies of kcov, used by coverage
+addons:
+  apt:
+    packages:
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - binutils-dev
+      - cmake # also required for cargo-update
+    sources:
+      - kalakris-cmake
+
+before_script:
+  - export PATH=$HOME/.cargo/bin:$PATH
+  - which cargo-install-update || cargo install cargo-update
+  - which cargo-benchcmp || cargo install cargo-benchcmp
+  - which cargo-coverage || cargo install cargo-travis
+  - cargo install-update -a # update outdated cached binaries
+
 script:
-  - cargo build --verbose --all
-  - cargo test --verbose --all
-  - cargo bench --verbose --all
+  - cargo build --verbose
+  - cargo test --verbose
+  - cargo bench --verbose
+  - |
+    set -e
+    if [ "${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH}" != "master" ]; then
+      cargo bench --verbose | tee benches-variable
+      git config remote.origin.fetch "+refs/heads/master:refs/remotes/origin/master"
+      git remote update
+      git checkout -b master origin/master
+      cargo bench --verbose | tee benches-control
+      cargo benchcmp benches-control benches-variable
+    fi
+after_success:
+  # measure code coverage and upload to codecov.io
+  - cargo coverage -m ../kcov && bash <(curl -s https://codecov.io/bash)
