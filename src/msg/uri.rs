@@ -80,40 +80,21 @@ fn hex_to_number(h: &u8) -> u8 {
   }
 }
 
-fn fold_hex_number(input: &Binary) -> Option<u16> {
-  let res = input.into_iter()
+fn fold_hex_number(input: &Binary) -> u16 {
+  input.into_iter()
     .map(hex_to_number)
-    .fold(0u64, |acc, i| acc * 16 + i as u64);
-
-  if res <= std::u16::MAX as u64 {
-    Some(res as u16)
-  } else {
-    None
-  }
+    .fold(0u64, |acc, i| acc * 16 + i as u64) as u16
 }
+
 
 // h16           = 1*4HEXDIG
 named!(#[inline], pub h16<u16>, do_parse!(
-  res:
-    verify!(
-      map!(
-        verify!(
-          streaming::hex_digit1,
-          |c: &Binary| c.len() <= 4
-        ),
-        fold_hex_number
-      ),
-    |r: &Option<u16>| r.is_some()
-    )  >>
-  ( res.unwrap() )
+  a: verify!(peek!(streaming::hex_digit1), |i:&Binary| i.len() > 0 && i.len() <= 4) >>
+  take!(a.len()) >>
+  ( fold_hex_number(a) )
 ));
 
-named!(#[inline], pub h16_and_colon<u16>, do_parse!(
-  h: h16 >>
-  char!(':') >>
-  not!(char!(':')) >>
-  (h)
-));
+named!(#[inline], pub colon_and_h16<u16>, preceded!(char!(':'), h16));
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Ls32 {
@@ -135,67 +116,12 @@ impl Ls32 {
 
 //ls32          = ( h16 ":" h16 ) / IPv4address
 named!(#[inline], pub ls32<Ls32>, alt!(
-  map!(tuple!(h16_and_colon, h16), |(a, b)| Ls32::Hex(a, b))
-  |
+  map!(tuple!(h16, colon_and_h16), |(a, b)| Ls32::Hex(a, b)) |
   map!(ipv4address, |a| Ls32::V4(a))
 ));
 
-fn mix_segments1(opt: (Option<u16>, u16)) -> (u16, u16) {
-  match opt {
-    (Some(a), e) => (a, e),
-    o => (o.1, 0,)
-  }
-}
+named!(#[inline], pub colon_and_ls32<Ls32>, preceded!(char!(':'), ls32));
 
-fn mix_segments2(opt: (Option<u16>, Option<u16>, u16)) -> (u16, u16, u16) {
-  match opt {
-    (Some(a), Some(b), e) => (a, b, e),
-    (Some(a), None, e) => (a, e, 0),
-    o => (o.2, 0, 0)
-  }
-}
-
-fn mix_segments3(opt: (Option<u16>, Option<u16>, Option<u16>, u16)) -> (u16, u16, u16, u16) {
-  match opt {
-    (Some(a), Some(b), Some(c), e) => (a, b, c, e),
-    (Some(a), Some(b), None, e) => (a, b, e, 0),
-    (Some(a), None, None, e) => (a, e, 0, 0),
-    o => (o.3, 0, 0, 0)
-  }
-}
-
-fn mix_segments4(opt: (Option<u16>, Option<u16>, Option<u16>, Option<u16>, u16)) -> (u16, u16, u16, u16, u16) {
-  match opt {
-    (Some(a), Some(b), Some(c), Some(d), e) => (a, b, c, d, e),
-    (Some(a), Some(b), Some(c), None, e) => (a, b, c, e, 0),
-    (Some(a), Some(b), None, None, e) => (a, b, e, 0, 0),
-    (Some(a), None, None, None, e) => (a, e, 0, 0, 0),
-    o => (o.4, 0, 0, 0, 0)
-  }
-}
-
-fn mix_segments5(opt: (Option<u16>, Option<u16>, Option<u16>, Option<u16>, Option<u16>, u16)) -> (u16, u16, u16, u16, u16, u16) {
-  match opt {
-    (Some(a), Some(b), Some(c), Some(d), Some(e), f) => (a, b, c, d, e, f),
-    (Some(a), Some(b), Some(c), Some(d), None, e) => (a, b, c, d, e, 0),
-    (Some(a), Some(b), Some(c), None, None, d) => (a, b, c, d, 0, 0),
-    (Some(a), Some(b), None, None, None, c) => (a, b, c, 0, 0, 0),
-    (Some(a), None, None, None, None, b) => (a, b, 0, 0, 0, 0),
-    o => (o.5, 0, 0, 0, 0, 0)
-  }
-}
-
-fn mix_segments6(opt: (Option<u16>, Option<u16>, Option<u16>, Option<u16>, Option<u16>, Option<u16>, u16)) -> (u16, u16, u16, u16, u16, u16, u16) {
-  match opt {
-    (Some(a), Some(b), Some(c), Some(d), Some(e), Some(f), g) => (a, b, c, d, e, f, g),
-    (Some(a), Some(b), Some(c), Some(d), Some(e), None, f) => (a, b, c, d, e, f, 0),
-    (Some(a), Some(b), Some(c), Some(d), None, None, e) => (a, b, c, d, e, 0, 0),
-    (Some(a), Some(b), Some(c), None, None, None, d) => (a, b, c, d, 0, 0, 0),
-    (Some(a), Some(b), None, None, None, None, c) => (a, b, c, 0, 0, 0, 0),
-    (Some(a), None, None, None, None, None, b) => (a, b, 0, 0, 0, 0, 0),
-    o => (o.6, 0, 0, 0, 0, 0, 0)
-  }
-}
 // hex4             =  1*4HEXDIG
 // hexseq           =  hex4 *( ":" hex4)
 // hexpart          =  hexseq / hexseq "::" [ hexseq ] / "::" [ hexseq ]
@@ -205,7 +131,7 @@ fn mix_segments6(opt: (Option<u16>, Option<u16>, Option<u16>, Option<u16>, Optio
 named!(#[inline], pub ipv6address<Ipv6Addr>, alt!(
 // IPv6address   =                             6( h16 ":" ) ls32
   map!(
-    tuple!(h16_and_colon, h16_and_colon, h16_and_colon, h16_and_colon, h16_and_colon, h16_and_colon, ls32),
+    tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32),
     |(h1, h2, h3, h4, h5, h6, ls)| {
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(h1, h2, h3, h4, h5, h6, h7, h8)
@@ -214,7 +140,7 @@ named!(#[inline], pub ipv6address<Ipv6Addr>, alt!(
   |
 //                /                       "::" 5( h16 ":" ) ls32
   map!(
-    preceded!(tag!("::"), tuple!(h16_and_colon, h16_and_colon, h16_and_colon, h16_and_colon, h16_and_colon, ls32)),
+    preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32)),
     |(h2, h3, h4, h5, h6, ls)| {
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(0, h2, h3, h4, h5, h6, h7, h8)
@@ -224,11 +150,8 @@ named!(#[inline], pub ipv6address<Ipv6Addr>, alt!(
 //                / [               h16 ] "::" 4( h16 ":" ) ls32
   map!(
     tuple!(
-      terminated!(
-        opt!(h16),
-        tag!("::")
-      ),
-      tuple!(h16_and_colon, h16_and_colon, h16_and_colon, h16_and_colon, ls32)
+      opt!(h16),
+      preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32))
     ),
     |(opt, (h3, h4, h5, h6, ls))| {
       let (h7, h8) = ls.segments();
@@ -239,88 +162,73 @@ named!(#[inline], pub ipv6address<Ipv6Addr>, alt!(
 //                / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
   map!(
     tuple!(
-      terminated!(
-        opt!(tuple!(opt!(h16_and_colon), h16)),
-        tag!("::")
-      ),
-      tuple!(h16_and_colon, h16_and_colon, h16_and_colon, ls32)
+      opt!(tuple!(h16, opt!(colon_and_h16))),
+      preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_ls32))
     ),
     |(opt, (h4, h5, h6, ls))| {
-      let (h1, h2) = mix_segments1(opt.unwrap_or((None, 0)));
+      let (h1, h2) = opt.unwrap_or((0, None));
       let (h7, h8) = ls.segments();
-      Ipv6Addr::new(h1, h2, 0, h4, h5, h6, h7, h8)
+      Ipv6Addr::new(h1, h2.unwrap_or(0), 0, h4, h5, h6, h7, h8)
     }
   )
   |
 //                / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
   map!(
     tuple!(
-      terminated!(
-        opt!(tuple!(opt!(h16_and_colon), opt!(h16_and_colon), h16)),
-        tag!("::")
-      ),
-      tuple!(h16_and_colon, h16_and_colon, ls32)
+      opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16))),
+      preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_ls32))
     ),
     |(opt, (h5, h6, ls))| {
-      let (h1, h2, h3) = mix_segments2(opt.unwrap_or((None, None, 0)));
+      let (h1, h2, h3) = opt.unwrap_or((0, None, None));
       let (h7, h8) = ls.segments();
-      Ipv6Addr::new(h1, h2, h3, 0, h5, h6, h7, h8)
+      Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), 0, h5, h6, h7, h8)
     }
   )
   |
 //                / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
   map!(
     tuple!(
-      terminated!(
-        opt!(tuple!(opt!(h16_and_colon), opt!(h16_and_colon), opt!(h16_and_colon), h16)),
-        tag!("::")
-      ),
-      tuple!(h16_and_colon, ls32)
+      opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))),
+      preceded!(tag!(b"::"), tuple!(h16, colon_and_ls32))
     ),
     |(opt, (h6, ls))| {
-      let (h1, h2, h3, h4) = mix_segments3(opt.unwrap_or((None, None, None, 0)));
+      let (h1, h2, h3, h4) = opt.unwrap_or((0, None, None, None));
       let (h7, h8) = ls.segments();
-      Ipv6Addr::new(h1, h2, h3, h4, 0, h6, h7, h8)
+      Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), 0, h6, h7, h8)
     }
   )
   |
 //                / [ *4( h16 ":" ) h16 ] "::"              ls32
   map!(
     tuple!(
-      terminated!(
-        opt!(tuple!(opt!(h16_and_colon), opt!(h16_and_colon), opt!(h16_and_colon), opt!(h16_and_colon), h16)),
-        tag!("::")
-      ),
-      ls32
+      opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))),
+      preceded!(tag!("::"), ls32)
     ),
     |(opt, ls)| {
-      let (h1, h2, h3, h4, h5) = mix_segments4(opt.unwrap_or((None, None, None, None, 0)));
+      let (h1, h2, h3, h4, h5) = opt.unwrap_or((0, None, None, None, None));
       let (h7, h8) = ls.segments();
-      Ipv6Addr::new(h1, h2, h3, h4, h5, 0, h7, h8)
+      Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), h5.unwrap_or(0), 0, h7, h8)
     }
   )
   |
 //                / [ *5( h16 ":" ) h16 ] "::"              h16
   map!(
     tuple!(
-      terminated!(
-        opt!(
-          tuple!(
-            opt!(h16_and_colon),
-            opt!(h16_and_colon),
-            opt!(h16_and_colon),
-            opt!(h16_and_colon),
-            opt!(h16_and_colon),
-            h16
-          )
-        ),
-        tag!("::")
+      opt!(
+        tuple!(
+          h16,
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16)
+        )
       ),
-      h16
+      preceded!(tag!("::"), h16)
     ),
     |(opt, h8)| {
-      let (h1, h2, h3, h4, h5, h6) = mix_segments5(opt.unwrap_or((None, None, None, None, None, 0)));
-      Ipv6Addr::new(h1, h2, h3, h4, h5, h6, 0, h8)
+      let (h1, h2, h3, h4, h5, h6) = opt.unwrap_or((0, None, None, None, None, None));
+      Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), h5.unwrap_or(0), h6.unwrap_or(0), 0, h8)
     }
   )
   |
@@ -329,20 +237,20 @@ named!(#[inline], pub ipv6address<Ipv6Addr>, alt!(
     terminated!(
       opt!(
         tuple!(
-          opt!(h16_and_colon),
-          opt!(h16_and_colon),
-          opt!(h16_and_colon),
-          opt!(h16_and_colon),
-          opt!(h16_and_colon),
-          opt!(h16_and_colon),
-          h16
+          h16,
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16),
+          opt!(colon_and_h16)
         )
       ),
       tag!("::")
     ),
     |opt| {
-      let (h1, h2, h3, h4, h5, h6, h7) = mix_segments6(opt.unwrap_or((None, None, None, None, None, None, 0)));
-      Ipv6Addr::new(h1, h2, h3, h4, h5, h6, h7, 0)
+      let (h1, h2, h3, h4, h5, h6, h7) = opt.unwrap_or((0, None, None, None, None, None, None));
+      Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), h5.unwrap_or(0), h6.unwrap_or(0), h7.unwrap_or(0), 0)
     }
   )
 ));

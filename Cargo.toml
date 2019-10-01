@@ -13,3 +13,13 @@ version = "^5"
 
 [dev-dependencies]
 rand = "0.7"
+bencher = "0.1.5"
+
+[[bench]]
+name = "parse"
+harness = false
+
+[profile.bench]
+lto = true
+codegen-units = 1
+opt-level = 3
