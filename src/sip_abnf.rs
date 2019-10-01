@@ -42,62 +42,74 @@ pub trait Word {
 }
 
 
-impl Mark for char {
+impl Mark for &[u8] {
   fn is_mark(&self) -> bool {
-    match self {
-      '-' | '_' | '.' | '!' | '~' | '*' | '\'' | '(' | ')' => true,
+    self.len() == 1 && match unsafe { self.get_unchecked(0) } {
+      b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => true,
       _ => false
     }
   }
 }
 
-impl Unreserved for char {
+impl Unreserved for &[u8] {
   fn is_unreserved(&self) -> bool {
-    self.is_alphanumeric() || self.is_mark()
+    self.len() == 1 && (self.is_mark() || {
+      let ch = unsafe { self.get_unchecked(0) };
+      ch.is_ascii_alphanumeric()
+    })
   }
 }
 
-impl UserUnreserved for char {
+impl UserUnreserved for &[u8] {
   fn is_user_unreserved(&self) -> bool {
-    match self {
-      '&' | '=' | '+' | '$' | ',' | ';' | '?' | '/' => true,
+    self.len() == 1 && match unsafe { self.get_unchecked(0) } {
+      b'&' | b'=' | b'+' | b'$' | b',' | b';' | b'?' | b'/' => true,
       _ => false
     }
   }
 }
 
-impl HnvUnreserved for char {
+impl HnvUnreserved for &[u8] {
   fn is_hnv_unreserved(&self) -> bool {
-    match self {
-      '[' | ']' | '/' | '?' | ':' | '+' | '$' => true,
+    self.len() == 1 && match unsafe { self.get_unchecked(0) } {
+      b'[' | b']' | b'/' | b'?' | b':' | b'+' | b'$' => true,
       _ => false
     }
   }
 }
 
-impl Token for char {
+impl Token for &[u8] {
   fn is_token(&self) -> bool {
-    self.is_alphanumeric() || match self {
-      '-' | '.' | '!' | '%' | '*' | '_' | '+' | '`' | '\'' | '~' => true,
+    self.len() == 1 && {
+      let ch = unsafe { self.get_unchecked(0) };
+      ch.is_ascii_alphanumeric() || match ch {
+        b'-' | b'.' | b'!' | b'%' | b'*' | b'_' | b'+' | b'`' | b'\'' | b'~' => true,
+        _ => false
+      }
+    }
+  }
+}
+
+impl LWS for &[u8] {
+  fn is_lws(&self) -> bool {
+    self.len() == 1 && match unsafe { self.get_unchecked(0) } {
+      b'\t' | 32 => true,
       _ => false
     }
   }
 }
 
-impl LWS for char {
-  fn is_lws(&self) -> bool {
-    *self == '\t' || *self == 32 as char
-  }
-}
-
-impl Word for char {
+impl Word for &[u8] {
   fn is_word(&self) -> bool {
-    self.is_alphanumeric() || match self {
-      '-' | '.' | '!' | '%' | '*' | '_' | '+' |
-      '`' | '\'' | '~' | '(' | ')' | '<' | '>' |
-      ':' | '\\' | '"' | '/' | '[' | ']' | '?' |
-      '{' | '}' => true,
-      _ => false
+    self.len() == 1 && {
+      let ch = unsafe { self.get_unchecked(0) };
+      ch.is_ascii_alphanumeric() || match ch {
+        b'-' | b'.' | b'!' | b'%' | b'*' | b'_' | b'+' |
+        b'`' | b'\'' | b'~' | b'(' | b')' | b'<' | b'>' |
+        b':' | b'\\' | b'"' | b'/' | b'[' | b']' | b'?' |
+        b'{' | b'}' => true,
+        _ => false
+      }
     }
   }
 }

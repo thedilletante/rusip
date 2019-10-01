@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 
+[dependencies.nom]
+version = "^5"
 
 [dev-dependencies]
 rand = "0.7"
