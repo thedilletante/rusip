@@ -244,7 +244,6 @@ mod tests {
     ipv4_success!("fa:2001:db8::9:01");
     ipv4_success!("34:fa:2001:db8::9:01");
     ipv4_success!("34:fa:2001:db8::127.0.0.1");
-    ipv4_success!("34:fa:2001:db8");
     ipv4_success!("0:0:0:0:0:FFFF:129.144.52.38");
 
   }
