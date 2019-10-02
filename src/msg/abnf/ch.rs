@@ -16,6 +16,8 @@ named!(#[inline], pub reserved<u8>, call!(map_byte, |i| match i {
   _ => false
 }));
 
+named!(#[inline], pub alpha<u8>, call!(map_byte, |i| i.is_ascii_alphabetic()));
+
 named!(#[inline], pub alphanum<u8>, call!(map_byte, |i| i.is_ascii_alphanumeric()));
 
 // unreserved  =  alphanum / mark

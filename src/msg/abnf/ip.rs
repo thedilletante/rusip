@@ -69,8 +69,13 @@ impl Ls32 {
 
 //ls32          = ( h16 ":" h16 ) / IPv4address
 named!(#[inline], pub ls32<Ls32>, alt!(
-  map!(tuple!(h16, colon_and_h16), |(a, b)| Ls32::Hex(a, b)) |
-  map!(ipv4address, |a| Ls32::V4(a))
+  tuple!(h16, colon_and_h16) => {
+    |(a, b)| Ls32::Hex(a, b)
+  }
+  |
+  ipv4address => {
+    |a| Ls32::V4(a)
+  }
 ));
 
 named!(#[inline], pub colon_and_ls32<Ls32>, preceded!(char!(':'), ls32));

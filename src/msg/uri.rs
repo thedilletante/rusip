@@ -16,12 +16,6 @@
 // password         =  *( unreserved / escaped /
 //                    "&" / "=" / "+" / "$" / "," )
 // hostport         =  host [ ":" port ]
-// host             =  hostname / IPv4address / ;
-// hostname         =  *( domainlabel "." ) toplabel [ "." ]
-// domainlabel      =  alphanum
-//                    / alphanum *( alphanum / "-" ) alphanum
-// toplabel         =  ALPHA / ALPHA *( alphanum / "-" ) alphanum
-
 // port             =  1*DIGIT
 // uri-parameters   =  *( ";" uri-parameter)
 // uri-parameter    =  transport-param / user-param / method-param
