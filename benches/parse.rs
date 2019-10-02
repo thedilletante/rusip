@@ -16,7 +16,7 @@ fn bench_ipv4_parse(b: &mut Bencher) {
 
   b.iter(|| {
     let suit = data.next().unwrap();
-    assert!(rusip::msg::uri::ipv4address(suit.0).is_ok() == suit.1);
+    assert!(rusip::msg::abnf::ip::ipv4address(suit.0).is_ok() == suit.1);
   });
   let stat = data.take(3).fold((0u64, 0u64), |(acc, count), (i, _)| (acc + i.len() as u64, count + 1));
   b.bytes = stat.0 / stat.1;
@@ -42,7 +42,7 @@ fn bench_ipv6_parse(b: &mut Bencher) {
   let buf = "[0:0:0:0:0:FFFF:129.144.52.38]".as_bytes();
 
   b.iter(|| {
-    assert!(rusip::msg::uri::ipv6reference(buf).is_ok());
+    assert!(rusip::msg::abnf::ip::ipv6reference(buf).is_ok());
   });
   b.bytes = buf.len() as u64;
 }

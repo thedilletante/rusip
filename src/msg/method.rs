@@ -13,7 +13,7 @@ pub enum Method <'a> {
 }
 
 pub mod parse {
-  use crate::msg::abnf::token;
+  use super::super::abnf::ch::token;
   use crate::msg::method::Method;
   //  INVITEm           =  %x49.4E.56.49.54.45 ; INVITE in caps
   //  ACKm              =  %x41.43.4B ; ACK in caps

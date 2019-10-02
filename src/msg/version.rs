@@ -10,12 +10,12 @@ pub struct Version(pub u8, pub u8);
 pub const DEFAULT_VERSION: Version = Version(2, 2);
 
 pub mod parse {
-  use crate::msg::abnf::single_digit;
+  use crate::msg::abnf::digit::single as single_digit;
   use crate::msg::version::Version;
 
   // SIP-Version    =  "SIP" "/" 1*DIGIT "." 1*DIGIT
   named!(#[inline], pub version<Version>, do_parse!(
-    tag_no_case!(b"SIP/") >>
+    tag_no_case!(b"SIP") >> char!('/') >>
     major: single_digit >>
     char!('.') >>
     minor: single_digit >>

@@ -1,7 +1,4 @@
 
-use super::Binary;
-
-
 // mark           =  "-" / "_" / "." / "!" / "~" / "*" / "'"
 //                   / "(" / ")"
 fn is_mark(i: u8) -> bool {
@@ -11,6 +8,7 @@ fn is_mark(i: u8) -> bool {
   }
 }
 named!(#[inline], pub mark<u8>, map!(verify!(take!(1), |i:&[u8]| is_mark(unsafe {*i.get_unchecked(0)})), |ch| unsafe{*ch.get_unchecked(0)} as u8));
+
 
 // reserved    =  ";" / "/" / "?" / ":" / "@" / "&" / "=" / "+"
 //                / "$" / ","
@@ -73,19 +71,13 @@ fn is_word(i: u8) -> bool {
 }
 named!(#[inline], pub word, take_while!(is_word));
 
-named!(#[inline], pub single_digit<u8>,
-  map!(verify!(take!(1), |ch: &Binary| {ch[0] > b'0' && ch[0] < b'9'}), |ch| ch[0] - b'0')
-);
-
-
 
 #[cfg(test)]
 mod tests {
 
-  use super::{token, single_digit};
-  use nom::Err::{Incomplete, Error};
+  use super::token;
+  use nom::Err::Incomplete;
   use nom::Needed;
-  use nom::error::ErrorKind::Verify;
 
   #[test]
   fn token_parse_test() {
@@ -93,14 +85,5 @@ mod tests {
     assert_eq!(token("hello world".as_bytes()), Ok((" world".as_bytes(), "hello".as_bytes())));
     assert_eq!(token("😀".as_bytes()), Ok(("😀".as_bytes(), "".as_bytes())));
     assert_eq!(token("-!%~😅".as_bytes()), Ok(("😅".as_bytes(), "-!%~".as_bytes())));
-  }
-
-  #[test]
-  fn single_digit_test() {
-    assert_eq!(single_digit("1".as_bytes()), Ok(("".as_bytes(), 1)));
-    assert_eq!(single_digit("35".as_bytes()), Ok(("5".as_bytes(), 3)));
-    assert_eq!(single_digit("s5".as_bytes()), Err(Error(("s5".as_bytes(), Verify))));
-    assert_eq!(single_digit("-".as_bytes()), Err(Error(("-".as_bytes(), Verify))));
-    assert_eq!(single_digit("".as_bytes()), Err(Incomplete(Needed::Size(1))));
   }
 }
