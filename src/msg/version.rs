@@ -15,7 +15,7 @@ pub mod parse {
 
   // SIP-Version    =  "SIP" "/" 1*DIGIT "." 1*DIGIT
   named!(#[inline], pub version<Version>, do_parse!(
-    tag_no_case!(b"SIP") >> char!('/') >>
+    tag_no_case!(b"SIP/") >>
     major: single_digit >>
     char!('.') >>
     minor: single_digit >>

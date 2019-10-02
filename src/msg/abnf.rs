@@ -10,7 +10,7 @@ fn is_mark(i: u8) -> bool {
     _ => false
   }
 }
-named!(#[inline], pub mark, take_while!(is_mark));
+named!(#[inline], pub mark<u8>, map!(verify!(take!(1), |i:&[u8]| is_mark(unsafe {*i.get_unchecked(0)})), |ch| unsafe{*ch.get_unchecked(0)} as u8));
 
 // reserved    =  ";" / "/" / "?" / ":" / "@" / "&" / "=" / "+"
 //                / "$" / ","

@@ -24,3 +24,12 @@ harness = false
 lto = true
 codegen-units = 1
 opt-level = 3
+
+[[bench]]
+name = "abnf"
+harness = false
+
+[profile.abnf]
+lto = true
+codegen-units = 1
+opt-level = 3
