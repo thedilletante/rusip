@@ -14,6 +14,7 @@ version = "^5"
 [dev-dependencies]
 rand = "0.7"
 bencher = "0.1.5"
+parsip = "0.1.0" # for comparison
 
 [[bench]]
 name = "parse"
