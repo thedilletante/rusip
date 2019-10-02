@@ -3,65 +3,48 @@ use std::net::{
   Ipv4Addr,
   Ipv6Addr
 };
-
-
-use nom::character::streaming;
-use nom::character::complete;
 use super::super::Binary;
-use super::digit::h16;
+use super::digit::{single, h16};
+use nom::IResult;
+use nom::Err::Error;
+use nom::error::ErrorKind::Digit;
 
 
-fn fold_number(input: &Binary) -> Option<u8> {
-  match input.into_iter()
-    .map(|ch| ch - b'0')
-    .fold(0u64, |acc, i| acc * 10 + i as u64) {
-    i@ 0..=255 => Some(i as u8),
-    _ => None
+#[inline]
+pub fn ip_octet(input: &Binary) -> IResult<&Binary, u8> {
+  let (mut input, a) = single(input)?;
+
+  let mut acc = a as u64;
+
+  'forloop: for _ in 0..2 {
+    match single(input) {
+      Ok((i, a)) => {
+        acc *= 10;
+        acc += a as u64;
+        if acc > 255 {
+          return Err(Error((input, Digit)));
+        }
+        input = i;
+      },
+      Err(_) => {
+        break 'forloop;
+      },
+    }
   }
+
+  Ok((input, acc as u8))
 }
 
-named!(#[inline], pub complete_digits1_3<u8>, do_parse!(
-  res:
-    verify!(
-      map!(
-        verify!(
-          complete::digit1,
-          |c: &Binary| c.len() <= 3
-        ),
-        fold_number
-      ),
-    |r: &Option<u8>| r.is_some()
-    )  >>
-  ( res.unwrap() )
-));
-
-named!(#[inline], pub streaming_digits1_3<u8>, do_parse!(
-  res:
-    verify!(
-      map!(
-        verify!(
-          streaming::digit1,
-          |c: &Binary| c.len() <= 3
-        ),
-        fold_number
-      ),
-    |r: &Option<u8>| r.is_some()
-    )  >>
-  ( res.unwrap() )
-));
-
-// IPv4address   =  1*3DIGIT "." 1*3DIGIT "." 1*3DIGIT "." 1*3DIGIT
 named!(#[inline], pub ipv4address<Ipv4Addr>, do_parse!(
-    a: streaming_digits1_3 >>
+    a: ip_octet >>
     char!('.') >>
-    b: streaming_digits1_3 >>
+    b: ip_octet >>
     char!('.') >>
-    c: streaming_digits1_3 >>
+    c: ip_octet >>
     char!('.') >>
-    d: complete_digits1_3 >>
+    d: ip_octet >>
     ( Ipv4Addr::new(a, b, c, d) )
 ));
-
 
 
 named!(#[inline], pub colon_and_h16<u16>, preceded!(char!(':'), h16));
@@ -196,16 +179,26 @@ named!(#[inline], pub ipv6reference<Ipv6Addr>,
 #[cfg(test)]
 mod tests {
 
-  use super::{ipv4address, ipv6reference, complete_digits1_3};
+  use super::{ipv4address, ipv6reference};
   use std::net::{Ipv4Addr, Ipv6Addr};
-  use nom::{Err::Error, error::ErrorKind::Verify, Needed};
+  use nom::{Err::Error, Needed};
   use nom::Err::Incomplete;
-  use nom::error::ErrorKind::Digit;
+  use nom::error::ErrorKind::{Digit, Char};
   use std::str::FromStr;
+  use crate::msg::abnf::ip::ip_octet;
 
   #[test]
-  fn parse_digits1_3_test() {
-    assert_eq!(complete_digits1_3("1".as_bytes()), Ok(("".as_bytes(), 1)));
+  fn parse_ip_octet() {
+    assert_eq!(ip_octet("0".as_bytes()), Ok(("".as_bytes(), 0)));
+    assert_eq!(ip_octet("1".as_bytes()), Ok(("".as_bytes(), 1)));
+    assert_eq!(ip_octet("10".as_bytes()), Ok(("".as_bytes(), 10)));
+    assert_eq!(ip_octet("99".as_bytes()), Ok(("".as_bytes(), 99)));
+    assert_eq!(ip_octet("127".as_bytes()), Ok(("".as_bytes(), 127)));
+    assert_eq!(ip_octet("255".as_bytes()), Ok(("".as_bytes(), 255)));
+    assert_eq!(ip_octet("2553".as_bytes()), Ok(("3".as_bytes(), 255)));
+    assert!(ip_octet("256".as_bytes()).is_err());
+    assert!(ip_octet("".as_bytes()).is_err());
+    assert!(ip_octet("k".as_bytes()).is_err());
   }
 
   #[test]
@@ -213,7 +206,7 @@ mod tests {
     assert_eq!(ipv4address("1.1.1.1".as_bytes()), Ok(("".as_bytes(), Ipv4Addr::new(1, 1, 1, 1))));
     assert_eq!(ipv4address("1.1.1.13".as_bytes()), Ok(("".as_bytes(), Ipv4Addr::new(1, 1, 1, 13))));
     assert_eq!(ipv4address("255.255.255.255".as_bytes()), Ok(("".as_bytes(), Ipv4Addr::new(!0, !0, !0, !0))));
-    assert_eq!(ipv4address("255.255.255.256".as_bytes()), Err(Error(("256".as_bytes(), Verify))));
+    assert_eq!(ipv4address("255.255.255.256".as_bytes()), Err(Error(("6".as_bytes(), Digit))));
 
     assert_eq!(ipv4address("2".as_bytes()), Err(Incomplete(Needed::Size(1))));
     assert_eq!(ipv4address("22".as_bytes()), Err(Incomplete(Needed::Size(1))));
@@ -225,39 +218,34 @@ mod tests {
     assert_eq!(ipv4address("222.121.".as_bytes()), Err(Incomplete(Needed::Size(1))));
     assert_eq!(ipv4address("222.121.4".as_bytes()), Err(Incomplete(Needed::Size(1))));
     assert_eq!(ipv4address("222.121.43".as_bytes()), Err(Incomplete(Needed::Size(1))));
-    assert_eq!(ipv4address("222.121.4.".as_bytes()), Err(Error(("".as_bytes(), Digit))));
+    assert_eq!(ipv4address("222.121.4.".as_bytes()), Err(Incomplete(Needed::Size(1))));
 
     assert_eq!(ipv4address("222.23.2.2".as_bytes()), Ok(("".as_bytes(), Ipv4Addr::new(222, 23, 2, 2))));
 
-    assert_eq!(ipv4address("2345.2.2.3".as_bytes()), Err(Error(("2345.2.2.3".as_bytes(), Verify))));
-    assert_eq!(ipv4address("127.0.0.1098".as_bytes()), Err(Error(("1098".as_bytes(), Verify))));
+    assert_eq!(ipv4address("2345.2.2.3".as_bytes()), Err(Error(("5.2.2.3".as_bytes(), Char))));
+    assert_eq!(ipv4address("127.0.0.1098".as_bytes()), Ok(("8".as_bytes(), Ipv4Addr::new(127, 0, 0, 109))));
+  }
+
+  macro_rules! ipv4_success {
+    ( $ip:expr ) => {
+      assert_eq!(
+        ipv6reference(format!("[{}]", $ip).as_bytes()),
+        Ok(("".as_bytes(), Ipv6Addr::from_str($ip).unwrap()))
+      );
+    };
   }
 
   #[test]
   fn ipv6() {
-    assert_eq!(
-      ipv6reference("[::ffff:192.0.2.10]".as_bytes()),
-      Ok(("".as_bytes(), Ipv6Addr::from_str("::ffff:192.0.2.10").unwrap()))
-    );
-    assert_eq!(
-      ipv6reference("[::ffff:c000:280]".as_bytes()),
-      Ok(("".as_bytes(), Ipv6Addr::from_str("::ffff:c000:280").unwrap()))
-    );
-    assert_eq!(
-      ipv6reference("[2001:db8::9:1]".as_bytes()),
-      Ok(("".as_bytes(), Ipv6Addr::from_str("2001:db8::9:1").unwrap()))
-    );
-    assert_eq!(
-      ipv6reference("[2001:db8::9:01]".as_bytes()),
-      Ok(("".as_bytes(), Ipv6Addr::from_str("2001:db8::9:01").unwrap()))
-    );
-    assert_eq!(
-      ipv6reference("[0:0:0:0:0:FFFF:129.144.52.38]".as_bytes()),
-      Ok(("".as_bytes(), Ipv6Addr::from_str("0:0:0:0:0:FFFF:129.144.52.38").unwrap()))
-    );
-    assert_eq!(
-      ipv6reference("[::FFFF:129.144.52.38]".as_bytes()),
-      Ok(("".as_bytes(), Ipv6Addr::from_str("::FFFF:129.144.52.38").unwrap()))
-    );
+    ipv4_success!("::ffff:192.0.2.10");
+    ipv4_success!("::ffff:c000:280");
+    ipv4_success!("2001:db8::9:1");
+    ipv4_success!("2001:db8::9:01");
+    ipv4_success!("fa:2001:db8::9:01");
+    ipv4_success!("34:fa:2001:db8::9:01");
+    ipv4_success!("34:fa:2001:db8::127.0.0.1");
+    ipv4_success!("34:fa:2001:db8");
+    ipv4_success!("0:0:0:0:0:FFFF:129.144.52.38");
+
   }
 }
