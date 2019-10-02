@@ -20,16 +20,11 @@ parsip = "0.1.0" # for comparison
 name = "parse"
 harness = false
 
-[profile.bench]
-lto = true
-codegen-units = 1
-opt-level = 3
-
 [[bench]]
 name = "abnf"
 harness = false
 
-[profile.abnf]
+[profile.bench]
 lto = true
 codegen-units = 1
 opt-level = 3

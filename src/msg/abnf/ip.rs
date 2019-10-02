@@ -7,7 +7,8 @@ use std::net::{
 
 use nom::character::streaming;
 use nom::character::complete;
-use crate::msg::Binary;
+use super::super::Binary;
+use super::digit::h16;
 
 
 fn fold_number(input: &Binary) -> Option<u8> {
@@ -62,31 +63,6 @@ named!(#[inline], pub ipv4address<Ipv4Addr>, do_parse!(
 ));
 
 
-fn hex_to_number(h: &u8) -> u8 {
-  match h {
-    b'a' | b'A' => 10,
-    b'b' | b'B' => 11,
-    b'c' | b'C' => 12,
-    b'd' | b'D' => 13,
-    b'e' | b'E' => 14,
-    b'f' | b'F' => 15,
-    v => v - b'0'
-  }
-}
-
-fn fold_hex_number(input: &Binary) -> u16 {
-  input.into_iter()
-    .map(hex_to_number)
-    .fold(0u64, |acc, i| acc * 16 + i as u64) as u16
-}
-
-
-// h16           = 1*4HEXDIG
-named!(#[inline], pub h16<u16>, do_parse!(
-  a: verify!(peek!(streaming::hex_digit1), |i:&Binary| i.len() > 0 && i.len() <= 4) >>
-  take!(a.len()) >>
-  ( fold_hex_number(a) )
-));
 
 named!(#[inline], pub colon_and_h16<u16>, preceded!(char!(':'), h16));
 
@@ -123,140 +99,99 @@ named!(#[inline], pub colon_and_ls32<Ls32>, preceded!(char!(':'), ls32));
 
 // Following ABNF is taken from [RFC 5954](Section 4.1 - Resolution for Extra Colon in IPv4-Mapped IPv6 Address)
 named!(#[inline], pub ipv6address<Ipv6Addr>, alt!(
-// IPv6address   =                             6( h16 ":" ) ls32
-  map!(
-    tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32),
-    |(h1, h2, h3, h4, h5, h6, ls)| {
+  // IPv6address   =                             6( h16 ":" ) ls32
+  tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32) => {
+    |(h1, h2, h3, h4, h5, h6, ls): (u16, u16, u16, u16, u16, u16, Ls32)| {
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(h1, h2, h3, h4, h5, h6, h7, h8)
     }
-  )
+  }
   |
-//                /                       "::" 5( h16 ":" ) ls32
-  map!(
-    preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32)),
-    |(h2, h3, h4, h5, h6, ls)| {
+  //                /                       "::" 5( h16 ":" ) ls32
+  preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32)) => {
+    |(h2, h3, h4, h5, h6, ls): (u16, u16, u16, u16, u16, Ls32)| {
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(0, h2, h3, h4, h5, h6, h7, h8)
     }
-  )
+  }
   |
-//                / [               h16 ] "::" 4( h16 ":" ) ls32
-  map!(
-    tuple!(
-      opt!(h16),
-      preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32))
-    ),
-    |(opt, (h3, h4, h5, h6, ls))| {
+  //                / [               h16 ] "::" 4( h16 ":" ) ls32
+  tuple!(opt!(h16), preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_h16, colon_and_ls32))) => {
+    |(opt, (h3, h4, h5, h6, ls)): (Option<u16>, (u16, u16, u16, u16, Ls32))| {
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(opt.unwrap_or(0), 0, h3, h4, h5, h6, h7, h8)
     }
-  )
+  }
   |
-//                / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
-  map!(
-    tuple!(
-      opt!(tuple!(h16, opt!(colon_and_h16))),
-      preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_ls32))
-    ),
-    |(opt, (h4, h5, h6, ls))| {
+  //                / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
+  tuple!(opt!(tuple!(h16, opt!(colon_and_h16))), preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_h16, colon_and_ls32))) => {
+    |(opt, (h4, h5, h6, ls)): (Option<(u16, Option<u16>)>, (u16, u16, u16, Ls32))| {
       let (h1, h2) = opt.unwrap_or((0, None));
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(h1, h2.unwrap_or(0), 0, h4, h5, h6, h7, h8)
     }
-  )
+  }
   |
-//                / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
-  map!(
-    tuple!(
-      opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16))),
-      preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_ls32))
-    ),
-    |(opt, (h5, h6, ls))| {
+  //                / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
+  tuple!(opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16))), preceded!(tag!("::"), tuple!(h16, colon_and_h16, colon_and_ls32))) => {
+    |(opt, (h5, h6, ls)): (Option<(u16, Option<u16>, Option<u16>)>, (u16, u16, Ls32))| {
       let (h1, h2, h3) = opt.unwrap_or((0, None, None));
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), 0, h5, h6, h7, h8)
     }
-  )
+  }
   |
-//                / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
-  map!(
-    tuple!(
-      opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))),
-      preceded!(tag!(b"::"), tuple!(h16, colon_and_ls32))
-    ),
-    |(opt, (h6, ls))| {
+  //                / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
+  tuple!(opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))), preceded!(tag!(b"::"), tuple!(h16, colon_and_ls32))) => {
+    |(opt, (h6, ls)): (Option<(u16, Option<u16>, Option<u16>, Option<u16>)>, (u16, Ls32))| {
       let (h1, h2, h3, h4) = opt.unwrap_or((0, None, None, None));
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), 0, h6, h7, h8)
     }
-  )
+  }
   |
-//                / [ *4( h16 ":" ) h16 ] "::"              ls32
-  map!(
-    tuple!(
-      opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))),
-      preceded!(tag!("::"), ls32)
-    ),
-    |(opt, ls)| {
+  //                / [ *4( h16 ":" ) h16 ] "::"              ls32
+  tuple!(opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))), preceded!(tag!("::"), ls32)) => {
+    |(opt, ls): (Option<(u16, Option<u16>, Option<u16>, Option<u16>, Option<u16>)>, Ls32)| {
       let (h1, h2, h3, h4, h5) = opt.unwrap_or((0, None, None, None, None));
       let (h7, h8) = ls.segments();
       Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), h5.unwrap_or(0), 0, h7, h8)
     }
-  )
+  }
   |
-//                / [ *5( h16 ":" ) h16 ] "::"              h16
-  map!(
-    tuple!(
-      opt!(
-        tuple!(
-          h16,
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16)
-        )
-      ),
-      preceded!(tag!("::"), h16)
-    ),
-    |(opt, h8)| {
+  //                / [ *5( h16 ":" ) h16 ] "::"              h16
+  tuple!(opt!(tuple!(h16, opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16), opt!(colon_and_h16))), preceded!(tag!("::"), h16)) => {
+    |(opt, h8): (Option<(u16, Option<u16>, Option<u16>, Option<u16>, Option<u16>, Option<u16>)>, u16)| {
       let (h1, h2, h3, h4, h5, h6) = opt.unwrap_or((0, None, None, None, None, None));
       Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), h5.unwrap_or(0), h6.unwrap_or(0), 0, h8)
     }
-  )
+  }
   |
-//                / [ *6( h16 ":" ) h16 ] "::"
-  map!(
-    terminated!(
-      opt!(
-        tuple!(
-          h16,
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16),
-          opt!(colon_and_h16)
-        )
-      ),
-      tag!("::")
+  //                / [ *6( h16 ":" ) h16 ] "::"
+  terminated!(
+    opt!(
+      tuple!(h16,
+        opt!(colon_and_h16),
+        opt!(colon_and_h16),
+        opt!(colon_and_h16),
+        opt!(colon_and_h16),
+        opt!(colon_and_h16),
+        opt!(colon_and_h16)
+      )
     ),
-    |opt| {
+    tag!("::")
+  ) => {
+    |opt: Option<(u16, Option<u16>, Option<u16>, Option<u16>, Option<u16>, Option<u16>, Option<u16>)>| {
       let (h1, h2, h3, h4, h5, h6, h7) = opt.unwrap_or((0, None, None, None, None, None, None));
       Ipv6Addr::new(h1, h2.unwrap_or(0), h3.unwrap_or(0), h4.unwrap_or(0), h5.unwrap_or(0), h6.unwrap_or(0), h7.unwrap_or(0), 0)
     }
-  )
+  }
 ));
 
 // IPv6reference    =  "[" IPv6address "]"
 named!(#[inline], pub ipv6reference<Ipv6Addr>,
   delimited!(char!('['), ipv6address, char!(']'))
 );
-
-
-
-
 
 #[cfg(test)]
 mod tests {
