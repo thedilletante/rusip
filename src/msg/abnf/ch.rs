@@ -1,12 +1,6 @@
 use super::super::Byte;
 use super::map_byte;
 
-// mark           =  "-" / "_" / "." / "!" / "~" / "*" / "'"
-//                   / "(" / ")"
-named!(#[inline], pub mark<u8>, call!(map_byte, |i| match i {
-  b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => true,
-  _ => false
-}));
 
 
 // reserved    =  ";" / "/" / "?" / ":" / "@" / "&" / "=" / "+"
@@ -20,8 +14,6 @@ named!(#[inline], pub alpha<u8>, call!(map_byte, |i| i.is_ascii_alphabetic()));
 
 named!(#[inline], pub alphanum<u8>, call!(map_byte, |i| i.is_ascii_alphanumeric()));
 
-// unreserved  =  alphanum / mark
-named!(#[inline], pub unreserved<u8>, alt!(alphanum | mark));
 
 // user-unreserved  =  "&" / "=" / "+" / "$" / "," / ";" / "?" / "/"
 named!(#[inline], pub user_unreserved<u8>, call!(map_byte, |i| match i {
@@ -29,11 +21,6 @@ named!(#[inline], pub user_unreserved<u8>, call!(map_byte, |i| match i {
   _ => false
 }));
 
-// hnv-unreserved  =  "[" / "]" / "/" / "?" / ":" / "+" / "$"
-named!(#[inline], pub hnv_unreserved<u8>, call!(map_byte, |i| match i {
-  b'[' | b']' | b'/' | b'?' | b':' | b'+' | b'$' => true,
-  _ => false
-}));
 
 // token       =  1*(alphanum / "-" / "." / "!" / "%" / "*"
 //                   / "_" / "+" / "`" / "'" / "~" )

@@ -1,0 +1,20 @@
+
+// absoluteURI      =  scheme ":" ( hier-part / opaque-part )
+// hier-part        =  ( net-path / abs-path ) [ "?" query ]
+// net-path         =  "//" authority [ abs-path ]
+// abs-path         =  "/" path-segments
+// opaque-part      =  uric-no-slash *uric
+// uric             =  reserved / unreserved / escaped
+// uric-no-slash    =  unreserved / escaped / ";" / "?" / ":" / "@"
+//                    / "&" / "=" / "+" / "$" / ","
+// path-segments    =  segment *( "/" segment )
+// segment          =  *pchar *( ";" param )
+// param            =  *pchar
+// pchar            =  unreserved / escaped /
+//                    ":" / "@" / "&" / "=" / "+" / "$" / ","
+// scheme           =  ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+// authority        =  srvr / reg-name
+// srvr             =  [ [ userinfo "@" ] hostport ]
+// reg-name         =  1*( unreserved / escaped / "$" / ","
+//                    / ";" / ":" / "@" / "&" / "=" / "+" )
+// query            =  *uric
