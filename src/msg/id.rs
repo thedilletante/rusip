@@ -132,9 +132,8 @@ mod tests {
     let mut output = vec![0; 100];
     for _ in 0..100 {
       let input: [u8; 30] = rand::random();
-      let size = token(&input[..rnd.gen_range(1, 30)], &mut output);
+      let size = token(&input[..rnd.gen_range(2, 30)], &mut output);
       assert!(size > 0);
-      println!("token is {}", String::from_utf8(output[0..size].to_vec()).unwrap());
       output[0..size].into_iter().for_each(|ch| assert!(is_token_char(ch)));
     }
   }
@@ -145,9 +144,8 @@ mod tests {
     let mut output = vec![0; 100];
     for _ in 0..100 {
       let input: [u8; 30] = rand::random();
-      let size = word(&input[..rnd.gen_range(1, 30)], &mut output);
+      let size = word(&input[..rnd.gen_range(2, 30)], &mut output);
       assert!(size > 0);
-      println!("word is {}", String::from_utf8(output[0..size].to_vec()).unwrap());
       output[0..size].into_iter().for_each(|ch| assert!(is_word_char(ch)));
     }
   }

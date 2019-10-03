@@ -250,6 +250,8 @@ mod tests {
     ipv4_success!("34:fa:2001:db8::9:01");
     ipv4_success!("34:fa:2001:db8::127.0.0.1");
     ipv4_success!("0:0:0:0:0:FFFF:129.144.52.38");
+    ipv4_success!("2001:db8::10:5070");
 
+    assert_eq!(ipv6reference("[2001:db8:::192.0.2.1]".as_bytes()), Err(Error((":192.0.2.1]".as_bytes(), Char))));
   }
 }

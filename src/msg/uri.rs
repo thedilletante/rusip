@@ -6,17 +6,25 @@
 // or some other scheme.
 
 
-// SIP-URI          =  "sip:" [ userinfo ] hostport
-//                    uri-parameters [ headers ]
-// SIPS-URI         =  "sips:" [ userinfo ] hostport
-//                    uri-parameters [ headers ]
+
+
+
 // userinfo         =  ( user / telephone-subscriber ) [ ":" password ] "@"
 // user             =  1*( unreserved / escaped / user-unreserved )
 // user-unreserved  =  "&" / "=" / "+" / "$" / "," / ";" / "?" / "/"
 // password         =  *( unreserved / escaped /
 //                    "&" / "=" / "+" / "$" / "," )
-// hostport         =  host [ ":" port ]
-// port             =  1*DIGIT
+
+
+
+// headers         =  "?" header *( "&" header )
+// header          =  hname "=" hvalue
+// hname           =  1*( hnv-unreserved / unreserved / escaped )
+// hvalue          =  *( hnv-unreserved / unreserved / escaped )
+// hnv-unreserved  =  "[" / "]" / "/" / "?" / ":" / "+" / "$"
+
+
+
 // uri-parameters   =  *( ";" uri-parameter)
 // uri-parameter    =  transport-param / user-param / method-param
 //                    / ttl-param / maddr-param / lr-param / other-param
@@ -35,7 +43,17 @@
 // pvalue           =  1*paramchar
 // paramchar        =  param-unreserved / unreserved / escaped
 // param-unreserved =  "[" / "]" / "/" / ":" / "&" / "+" / "$"
+
+
 // Request-URI      =  SIP-URI / SIPS-URI / absoluteURI
+// SIP-URI          =  "sip:" [ userinfo ] hostport
+//                    uri-parameters [ headers ]
+// SIPS-URI         =  "sips:" [ userinfo ] hostport
+//                    uri-parameters [ headers ]
+
+
+
+
 // absoluteURI      =  scheme ":" ( hier-part / opaque-part )
 // hier-part        =  ( net-path / abs-path ) [ "?" query ]
 // net-path         =  "//" authority [ abs-path ]
