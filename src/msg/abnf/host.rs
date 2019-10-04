@@ -7,16 +7,13 @@ use super::{
   ip::{ipv4address, ipv6reference}
 };
 
-use nom::{
-  IResult,
-  error::ErrorKind::{
-    Verify,
-    Digit
-  },
-  Err::Error,
-};
+use nom::{IResult, error::ErrorKind::{
+  Verify,
+  Digit
+}, Err::Error, Needed};
 
 use std::net::{Ipv4Addr, Ipv6Addr};
+use nom::Err::Incomplete;
 
 named!(#[inline], take1, take!(1));
 
@@ -67,63 +64,76 @@ named!(#[inline],
 
 // hostname         =  *( domainlabel "." ) toplabel [ "." ]
 #[inline]
-pub fn hostname(input: &Binary) -> IResult<&Binary, &Binary> {
+pub fn hostname<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
+  -> IResult<&'a Binary, (&'a Binary, usize)> {
   let mut rest = input;
   let mut last_top_rest: Option<&Binary> = None;
-  let mut count = 0usize;
-  let mut commit = count;
+
+  let mut last_top = input;
+  let mut num_domains = 0usize;
+  let mut commit_num_domains = num_domains;
 
   while let Ok((_, _)) = peek!(rest, tuple!(domainlabel, dot)) {
     if let Ok((r, o)) = toplabel(rest) {
+      if num_domains >= domains.len() {
+        return Err(Incomplete(Needed::Unknown));
+      }
+      domains[num_domains] = o;
+      num_domains += 1;
       let (r, _) = dot(r)?;
       rest = r;
-      count += o.len() + 1;
-      commit = count;
+      commit_num_domains = num_domains;
       last_top_rest = Some(rest);
+      last_top = o;
     } else {
       let (r, o) = domainlabel(rest)?;
       let (r, _) = dot(r)?;
-      count += o.len() + 1;
       rest = r;
+      if num_domains >= domains.len() {
+        return Err(Incomplete(Needed::Unknown));
+      }
+
+      domains[num_domains] = o;
+      num_domains += 1;
     }
   }
 
   if let Ok((r, o)) = toplabel(rest) {
-    commit = count;
-    commit += o.len();
     rest = r;
+    last_top = o;
+    commit_num_domains = num_domains;
   } else {
     match last_top_rest {
       None => {
         return Err(Error((input, Verify)));
       },
       Some(r) => {
-        return Ok((r, &input[..commit]));
+        return Ok((r, (last_top, commit_num_domains - 1)));
       }
     }
   }
 
   if let Ok((r, _)) = dot(input) {
     rest = r;
-    commit += 1;
   }
 
-  Ok((rest, &input[..commit]))
+  Ok((rest, (last_top, commit_num_domains)))
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Host<'a> {
-  Hostname(&'a Binary),
+  Hostname(&'a Binary, usize),
   Ipv4(Ipv4Addr),
   Ipv6(Ipv6Addr)
 }
 
 // host             =  hostname / IPv4address / IPv6reference
 #[inline]
-pub fn host(input: &Binary) -> IResult<&Binary, Host> {
+pub fn host<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
+  -> IResult<&'a Binary, Host<'a>> {
   alt!(input,
-    hostname => {
-      |out| Host::Hostname(out)
+    call!(hostname, domains) => {
+      |(top, num)| Host::Hostname(top, num)
     }
     |
     ipv4address => {
@@ -168,8 +178,9 @@ named!(#[inline],
 
 // hostport         =  host [ ":" port ]
 #[inline]
-pub fn hostport(input: &Binary) -> IResult<&Binary, (Host, Option<u16>)> {
-  let (mut rest, h) = host(input)?;
+pub fn hostport<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
+  -> IResult<&'a Binary, (Host<'a>, Option<u16>)> {
+  let (mut rest, h) = host(input, domains)?;
 
   let p = if let Ok((r, _)) = colon(rest) {
     let (r, p) = port(r)?;
@@ -187,6 +198,7 @@ mod tests {
   use super::{domainlabel, toplabel, hostname, host, Host, port, hostport};
   use nom::Err as Error;
   use nom::error::ErrorKind::{Verify, Digit, Complete};
+  use nom::Needed;
   use std::net::{Ipv6Addr, Ipv4Addr};
   use std::str::FromStr;
   macro_rules! parser_ok {
@@ -245,48 +257,58 @@ mod tests {
   }
 
   macro_rules! hostname_test {
-    ( $input:literal makes $expected:expr, $left:expr) => {
-      parser_ok!( $input => hostname => $expected.as_bytes(), $left )
+    ( $input:literal makes $top:literal top, $left:expr) => {
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!( hostname($input.as_bytes(), &mut buf), Ok(($left.as_bytes(), ($top.as_bytes(), 0))));
+    };
+    ( $input:literal makes $top:literal top and domains: $($domain:literal),+  : left $left:literal) => {
+      let mut buf = ["".as_bytes(); 100];
+      let domains = [$($domain),+];
+      assert_eq!(hostname($input.as_bytes(), &mut buf), Ok(($left.as_bytes(), ($top.as_bytes(), domains.len()))));
+      Iterator::zip(buf.into_iter(), domains.into_iter()).for_each(|(b, d)|{
+        assert_eq!(*b, d.as_bytes());
+      });
     };
     ( $input:literal fails $error:expr, $left:expr ) => {
-      parser_fail!($input => hostname |= Error::Error(($left.as_bytes(), $error)))
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!( hostname($input.as_bytes(), &mut buf), Err(Error::Error(($left.as_bytes(), $error))));
     };
   }
 
   #[test]
   fn hostname_test() {
-    hostname_test!("a" makes "a", "");
-    hostname_test!("a." makes "a.", "");
-    hostname_test!("a.a." makes "a.a.", "");
-    hostname_test!("a.a" makes "a.a", "");
-    hostname_test!("1.a" makes "1.a", "");
-    hostname_test!("1.a." makes "1.a.", "");
-    hostname_test!("a.1" makes "a.", "1");
-    hostname_test!("a.1." makes "a.", "1.");
-    hostname_test!("3.a.4.b-d.1." makes "3.a.4.b-d.", "1.");
-
+    hostname_test!("a" makes "a" top, "");
+    hostname_test!("a." makes "a" top, "");
+    hostname_test!("a.a." makes "a" top and domains: "a": left "");
+    hostname_test!("a.a" makes "a" top and domains: "a": left "");
+    hostname_test!("1.a" makes "a" top and domains: "1": left "");
+    hostname_test!("1.a." makes "a" top and domains: "1": left "");
+    hostname_test!("a.1" makes "a" top, "1");
+    hostname_test!("a.1." makes "a" top, "1.");
+    hostname_test!("3.a.4.b-d.1." makes "b-d" top and domains: "3", "a", "4" : left "1.");
+    assert_eq!(hostname("3.a.4.b-d.1.".as_bytes(), &mut []), Err(Error::Incomplete(Needed::Unknown)));
     hostname_test!("4.4." fails Verify, "4.4.");
+
+    hostname_test!("3450.ns-45.goo.gov a;lkds" makes "gov" top and domains: "3450", "ns-45", "goo" : left " a;lkds");
   }
 
   macro_rules! host_test {
     ( $input:literal makes $expected:expr, $left:expr) => {
-      parser_ok!( $input => host => $expected, $left )
-    };
-    ( $input:literal fails $error:expr, $left:expr ) => {
-      parser_fail!($input => host |= Error::Error(($left.as_bytes(), $error)))
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!( host($input.as_bytes(), &mut buf), Ok(($left.as_bytes(), $expected)));
     };
   }
 
   #[test]
   fn host_test() {
     host_test!("127.0.0.1" makes Host::Ipv4(Ipv4Addr::from_str("127.0.0.1").unwrap()), "");
-    host_test!("ringcentral.com" makes Host::Hostname("ringcentral.com".as_bytes()), "");
+    host_test!("ringcentral.com" makes Host::Hostname("com".as_bytes(), 1), "");
     host_test!("[fa:2001:db8::9:01]" makes Host::Ipv6(Ipv6Addr::from_str("fa:2001:db8::9:01").unwrap()), "");
   }
 
   macro_rules! port_test {
     ( $input:literal makes $expected:expr, $left:expr) => {
-      parser_ok!( $input => port => $expected, $left )
+      parser_ok!( $input => port => $expected, $left );
     };
     ( $input:literal fails $error:expr, $left:expr ) => {
       parser_fail!($input => port |= Error::Error(($left.as_bytes(), $error)))
@@ -307,26 +329,47 @@ mod tests {
   }
 
   macro_rules! hostport_test {
-    ( $input:literal makes $host:literal, $left:literal) => {
-      parser_ok!( $input => hostport => (Host::Hostname($host.as_bytes()), None), $left )
+    ( $input:literal makes $host:literal,$domains:literal, $left:literal) => {
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!(
+        hostport($input.as_bytes(), &mut buf),
+        Ok(($left.as_bytes(), (Host::Hostname($host.as_bytes(), $domains), None)))
+      );
     };
-    ( $input:literal makes $host:literal : $port:literal, $left:expr) => {
-      parser_ok!( $input => hostport => (Host::Hostname($host.as_bytes()), Some($port)), $left )
+    ( $input:literal makes $host:literal,$domains:literal : $port:literal, $left:expr) => {
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!(
+        hostport($input.as_bytes(), &mut buf),
+        Ok(($left.as_bytes(), (Host::Hostname($host.as_bytes(), $domains), Some($port))))
+      );
     };
     ( $input:literal makes v4 $host:literal, $left:literal) => {
-      parser_ok!( $input => hostport => (Host::Ipv4(Ipv4Addr::from_str($host).unwrap()), None), $left )
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!(
+        hostport($input.as_bytes(), &mut buf),
+        Ok(($left.as_bytes(), (Host::Ipv4(Ipv4Addr::from_str($host).unwrap()), None)))
+      );
     };
     ( $input:literal makes v4 $host:literal : $port:literal, $left:expr) => {
-      parser_ok!( $input => hostport => (Host::Ipv4(Ipv4Addr::from_str($host).unwrap()), Some($port)), $left )
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!(
+        hostport($input.as_bytes(), &mut buf),
+        Ok(($left.as_bytes(), (Host::Ipv4(Ipv4Addr::from_str($host).unwrap()), Some($port))))
+      );
     };
     ( $input:literal makes v6 $host:literal, $left:literal) => {
-      parser_ok!( $input => hostport => (Host::Ipv6(Ipv6Addr::from_str($host).unwrap()), None), $left )
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!(
+        hostport($input.as_bytes(), &mut buf),
+        Ok(($left.as_bytes(), (Host::Ipv6(Ipv6Addr::from_str($host).unwrap()), None)))
+      );
     };
     ( $input:literal makes v6 $host:literal : $port:literal, $left:expr) => {
-      parser_ok!( $input => hostport => (Host::Ipv6(Ipv6Addr::from_str($host).unwrap()), Some($port)), $left )
-    };
-    ( $input:literal fails $error:expr, $left:expr ) => {
-      parser_fail!($input => hostport |= Error::Error(($left.as_bytes(), $error)))
+      let mut buf = ["".as_bytes(); 10];
+      assert_eq!(
+        hostport($input.as_bytes(), &mut buf),
+        Ok(($left.as_bytes(), (Host::Ipv6(Ipv6Addr::from_str($host).unwrap()), Some($port))))
+      );
     };
   }
 
@@ -336,8 +379,8 @@ mod tests {
     hostport_test!("127.0.0.1:2222" makes v4"127.0.0.1":2222, "");
     hostport_test!("[2001:db8::192.0.2.1]" makes v6"2001:db8::192.0.2.1", "");
     hostport_test!("[2001:db8::10]:5070 " makes v6"2001:db8::10":5070, " ");
-    hostport_test!("www.yandex.ru" makes "www.yandex.ru", "");
-    hostport_test!("www.yandex.ru:22" makes "www.yandex.ru":22, "");
+    hostport_test!("www.yandex.ru" makes "ru",2, "");
+    hostport_test!("yandex.ru:22" makes "ru",1:22, "");
   }
 
 
