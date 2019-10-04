@@ -9,29 +9,17 @@ use super::{
 
 use nom::{
   IResult,
-  error::{
-    ErrorKind::Verify,
-    ParseError,
-    ErrorKind
+  error::ErrorKind::{
+    Verify,
+    Digit
   },
   Err::Error,
-  bytes::streaming::take
 };
 
 use std::net::{Ipv4Addr, Ipv6Addr};
-use nom::error::ErrorKind::Digit;
 
-// fake implementation to allow take!() invocation
-struct TakeError;
-impl ParseError<&Binary> for TakeError {
-  fn from_error_kind(_input: &[u8], _kind: ErrorKind) -> Self {
-    TakeError
-  }
+named!(#[inline], take1, take!(1));
 
-  fn append(_input: &[u8], _kind: ErrorKind, _other: Self) -> Self {
-    TakeError
-  }
-}
 
 #[inline]
 fn byte_or_byte_terminated_alphanum_with_dash<F, O>(f: F, input: &Binary) -> IResult<&Binary, &Binary>
@@ -42,7 +30,7 @@ fn byte_or_byte_terminated_alphanum_with_dash<F, O>(f: F, input: &Binary) -> IRe
   let mut count = 1usize;
   let mut commited = count;
 
-  while let Ok((r, out)) = take::<usize, &Binary, TakeError>(1usize)(rest) {
+  while let Ok((r, out)) = take1(rest) {
     count += 1;
     rest = r;
 
