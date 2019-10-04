@@ -1,19 +1,26 @@
 use super::super::Byte;
 use super::map_byte;
-
-
-
-// reserved    =  ";" / "/" / "?" / ":" / "@" / "&" / "=" / "+"
-//                / "$" / ","
-named!(#[inline], pub reserved<u8>, call!(map_byte, |i| match i {
-  b';' | b'|' | b'?' | b':' | b'@' | b'&' | b'=' | b'+' | b'$' | b',' => true,
-  _ => false
-}));
+use super::digit::single_hex;
 
 named!(#[inline], pub alpha<u8>, call!(map_byte, |i| i.is_ascii_alphabetic()));
 
 named!(#[inline], pub alphanum<u8>, call!(map_byte, |i| i.is_ascii_alphanumeric()));
 
+// mark           =  "-" / "_" / "." / "!" / "~" / "*" / "'"
+//                   / "(" / ")"
+named!(#[inline],
+  pub mark<u8>,
+  one_of_byte!(b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')')
+);
+
+// unreserved  =  alphanum / mark
+named!(#[inline], pub unreserved<u8>, alt!(alphanum | mark));
+
+// escaped     =  "%" HEXDIG HEXDIG
+named!(#[inline],
+  pub escaped<u8>,
+  map!(preceded!(byte!(b'%'), tuple!(single_hex, single_hex)), |(a, b)| a * 16 + b)
+);
 
 // user-unreserved  =  "&" / "=" / "+" / "$" / "," / ";" / "?" / "/"
 named!(#[inline], pub user_unreserved<u8>, call!(map_byte, |i| match i {

@@ -2,6 +2,8 @@ use super::map_byte;
 
 use super::super::Binary;
 use nom::IResult;
+use nom::Err::Error;
+use nom::error::ErrorKind::Digit;
 
 named!(#[inline],
   pub single<u8>,
@@ -26,6 +28,32 @@ named!(#[inline],
     }
   )
 );
+
+// decimal u8               =  1*3DIGIT ; 0 to 255
+#[inline]
+pub fn dec_u8(input: &Binary) -> IResult<&Binary, u8> {
+  let (mut input, a) = single(input)?;
+
+  let mut acc = a as u64;
+
+  'forloop: for _ in 0..2 {
+    match single(input) {
+      Ok((i, a)) => {
+        acc *= 10;
+        acc += a as u64;
+        if acc > 255 {
+          return Err(Error((input, Digit)));
+        }
+        input = i;
+      },
+      Err(_) => {
+        break 'forloop;
+      },
+    }
+  }
+
+  Ok((input, acc as u8))
+}
 
 // h16           = 1*4HEXDIG
 #[inline]
@@ -53,7 +81,7 @@ pub fn h16(input: &Binary) -> IResult<&Binary, u16> {
 #[cfg(test)]
 mod tests {
 
-  use super::{single, h16};
+  use super::{single, h16, dec_u8};
   use nom::Err::{Incomplete, Error};
   use nom::Needed;
   use nom::error::ErrorKind::Verify;
@@ -67,6 +95,21 @@ mod tests {
     assert_eq!(single("s5".as_bytes()), Err(Error(("s5".as_bytes(), Verify))));
     assert_eq!(single("-".as_bytes()), Err(Error(("-".as_bytes(), Verify))));
     assert_eq!(single("".as_bytes()), Err(Incomplete(Needed::Size(1))));
+  }
+
+
+  #[test]
+  fn parse_dec_u8() {
+    assert_eq!(dec_u8("0".as_bytes()), Ok(("".as_bytes(), 0)));
+    assert_eq!(dec_u8("1".as_bytes()), Ok(("".as_bytes(), 1)));
+    assert_eq!(dec_u8("10".as_bytes()), Ok(("".as_bytes(), 10)));
+    assert_eq!(dec_u8("99".as_bytes()), Ok(("".as_bytes(), 99)));
+    assert_eq!(dec_u8("127".as_bytes()), Ok(("".as_bytes(), 127)));
+    assert_eq!(dec_u8("255".as_bytes()), Ok(("".as_bytes(), 255)));
+    assert_eq!(dec_u8("2553".as_bytes()), Ok(("3".as_bytes(), 255)));
+    assert!(dec_u8("256".as_bytes()).is_err());
+    assert!(dec_u8("".as_bytes()).is_err());
+    assert!(dec_u8("k".as_bytes()).is_err());
   }
 
   #[test]

@@ -16,18 +16,117 @@ pub(crate) fn map_byte<F>(input: &Binary, f: F) -> IResult<&Binary, Byte>
 }
 
 macro_rules! byte (
-  ($i:expr, $b:literal) => ( map_byte($i, |i: u8| i == $b) );
+  ($i:expr, $b:expr) => ( $crate::msg::abnf::map_byte($i, |i: u8| i == $b) );
 );
 
 macro_rules! one_of_byte(
   ($i: expr, $($b:literal)|+) => (
-    map_byte($i, |i: u8| {
+    $crate::msg::abnf::map_byte($i, |i: u8| {
       match i {
         $($b)|+ => true,
         _ => false
       }
     })
   )
+);
+
+// TODO: how to match bytes instead of str
+//       is it possible?
+//macro_rules! bytes (
+//  ($input:expr, $expected:expr) => ({
+//    let mut rest = $input;
+//    println!("trying to find: {}", std::str::from_utf8($expected).unwrap());
+//
+//    // TODO: why just iteration does not work???
+////    let ret = tag!($input, std::str::from_utf8($expected).unwrap());
+////    println!("ret is {:?}", ret);
+////    ret
+//    for b in $expected {
+//      match byte!(rest, *b) {
+//        Err(a) => {
+//          println!("error is {:?}", a);
+//          return Err(a);
+//        },
+//        Ok((r, _)) => {
+//          println!("matched with {}", *b);
+//          rest = r;
+//        }
+//      }
+////      let (r, _) = byte!(rest, *b)?;
+////      rest = r;
+//    }
+//    Ok((rest, ()))
+//  });
+//);
+
+pub(crate) trait Consumed {
+  fn consumed(&self) -> usize;
+}
+
+impl Consumed for &Binary {
+  fn consumed(&self) -> usize {
+    self.len()
+  }
+}
+
+impl Consumed for u8 {
+  fn consumed(&self) -> usize {
+    1
+  }
+}
+
+macro_rules! at_least_one (
+  ($input:expr, $submac:ident!( $($args:tt)* )) => ({
+
+    let (mut rest, c) = $submac!($input, $($args)*)?;
+    let mut len = $crate::msg::abnf::Consumed::consumed(&c);
+
+    while let Ok((r, c)) =  $submac!(rest, $($args)*) {
+      rest = r;
+      len += $crate::msg::abnf::Consumed::consumed(&c);
+    }
+
+    Ok((rest, &$input[..len]))
+
+  });
+  ($input:expr, $fn:expr) => ({
+    let (mut rest, c) = $fn($input)?;
+    let mut len = $crate::msg::abnf::Consumed::consumed(&c);
+
+    while let Ok((r, c)) = $fn(rest) {
+      rest = r;
+      len += $crate::msg::abnf::Consumed::consumed(&c);
+    }
+
+    Ok((rest, &$input[..len]))
+  });
+);
+
+macro_rules! many_times (
+  ($input:expr, $submac:ident!( $($args:tt)* )) => ({
+
+    let mut rest = $input;
+    let mut len = 0usize;
+
+    while let Ok((r, c)) =  $submac!(rest, $($args)*) {
+      rest = r;
+      len += $crate::msg::abnf::Consumed::consumed(&c);
+    }
+
+    Ok((rest, &$input[..len]))
+
+  });
+  ($input:expr, $fn:expr) => ({
+    let mut rest = $input;
+    let mut len = 0usize;
+
+    while let Ok((r, c)) = $fn(rest) {
+      rest = r;
+      len += $crate::msg::abnf::Consumed::consumed(&c);
+    }
+
+    Ok((rest, &$input[..len]))
+  });
 );
 
 pub mod ch;

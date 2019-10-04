@@ -1,8 +1,5 @@
-use super::map_byte;
-use super::digit::single_hex;
-use super::ch::alphanum;
+use super::ch::{unreserved, escaped};
 use crate::msg::Binary;
-use nom::IResult;
 
 // hnv-unreserved  =  "[" / "]" / "/" / "?" / ":" / "+" / "$"
 named!(#[inline],
@@ -10,57 +7,33 @@ named!(#[inline],
   one_of_byte!(b'[' | b']' | b'/' | b'?' | b':' | b'+' | b'$')
 );
 
-// mark           =  "-" / "_" / "." / "!" / "~" / "*" / "'"
-//                   / "(" / ")"
-named!(#[inline],
-  pub mark<u8>,
-  one_of_byte!(b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')')
-);
+struct Digits(usize);
 
-// unreserved  =  alphanum / mark
-named!(#[inline], pub unreserved<u8>, alt!(alphanum | mark));
-
-// escaped     =  "%" HEXDIG HEXDIG
-named!(#[inline],
-  pub escaped<u8>,
-  map!(preceded!(byte!(b'%'), tuple!(single_hex, single_hex)), |(a, b)| a * 16 + b)
-);
-
-named!(#[inline],
-  header_elem_len<u8>,
-  alt!(
-    hnv_unreserved => { |_| 1 } |
-    unreserved => { |_| 1 } |
-    escaped => { |_| 3 }
-  )
-);
+impl super::Consumed for Digits {
+  fn consumed(&self) -> usize {
+    self.0
+  }
+}
 
 // hname           =  1*( hnv-unreserved / unreserved / escaped )
-#[inline]
-pub fn hname(input: &Binary) -> IResult<&Binary, &Binary> {
-  let (mut rest, l) = header_elem_len(input)?;
-  let mut len = l as usize;
-
-  while let Ok((r, l)) = header_elem_len(rest) {
-    rest = r;
-    len += l as usize;
-  }
-
-  Ok((rest, &input[..len]))
-}
+named!(#[inline],
+  hname,
+  at_least_one!(alt!(
+    hnv_unreserved => { |_| Digits(1) } |
+    unreserved => { |_| Digits(1) } |
+    escaped => { |_| Digits(3) }
+  ))
+);
 
 // hvalue          =  *( hnv-unreserved / unreserved / escaped )
-#[inline]
-pub fn hvalue(input: &Binary) -> IResult<&Binary, &Binary> {
-  let mut rest = input;
-  let mut len = 0usize;
-  while let Ok((r, l)) = header_elem_len(rest) {
-    rest = r;
-    len += l as usize;
-  }
-
-  Ok((rest, &input[..len]))
-}
+named!(#[inline],
+  hvalue,
+  many_times!(alt!(
+    hnv_unreserved => { |_| Digits(1) } |
+    unreserved => { |_| Digits(1) } |
+    escaped => { |_| Digits(3) }
+  ))
+);
 
 // header          =  hname "=" hvalue
 named!(#[inline],

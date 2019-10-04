@@ -3,46 +3,16 @@ use std::net::{
   Ipv4Addr,
   Ipv6Addr
 };
-use super::super::Binary;
-use super::digit::{single, h16};
-use nom::IResult;
-use nom::Err::Error;
-use nom::error::ErrorKind::Digit;
-
-
-#[inline]
-pub fn ip_octet(input: &Binary) -> IResult<&Binary, u8> {
-  let (mut input, a) = single(input)?;
-
-  let mut acc = a as u64;
-
-  'forloop: for _ in 0..2 {
-    match single(input) {
-      Ok((i, a)) => {
-        acc *= 10;
-        acc += a as u64;
-        if acc > 255 {
-          return Err(Error((input, Digit)));
-        }
-        input = i;
-      },
-      Err(_) => {
-        break 'forloop;
-      },
-    }
-  }
-
-  Ok((input, acc as u8))
-}
+use super::digit::{dec_u8, h16};
 
 named!(#[inline], pub ipv4address<Ipv4Addr>, do_parse!(
-    a: ip_octet >>
+    a: dec_u8 >>
     char!('.') >>
-    b: ip_octet >>
+    b: dec_u8 >>
     char!('.') >>
-    c: ip_octet >>
+    c: dec_u8 >>
     char!('.') >>
-    d: ip_octet >>
+    d: dec_u8 >>
     ( Ipv4Addr::new(a, b, c, d) )
 ));
 
@@ -190,21 +160,6 @@ mod tests {
   use nom::Err::Incomplete;
   use nom::error::ErrorKind::{Digit, Char};
   use std::str::FromStr;
-  use crate::msg::abnf::ip::ip_octet;
-
-  #[test]
-  fn parse_ip_octet() {
-    assert_eq!(ip_octet("0".as_bytes()), Ok(("".as_bytes(), 0)));
-    assert_eq!(ip_octet("1".as_bytes()), Ok(("".as_bytes(), 1)));
-    assert_eq!(ip_octet("10".as_bytes()), Ok(("".as_bytes(), 10)));
-    assert_eq!(ip_octet("99".as_bytes()), Ok(("".as_bytes(), 99)));
-    assert_eq!(ip_octet("127".as_bytes()), Ok(("".as_bytes(), 127)));
-    assert_eq!(ip_octet("255".as_bytes()), Ok(("".as_bytes(), 255)));
-    assert_eq!(ip_octet("2553".as_bytes()), Ok(("3".as_bytes(), 255)));
-    assert!(ip_octet("256".as_bytes()).is_err());
-    assert!(ip_octet("".as_bytes()).is_err());
-    assert!(ip_octet("k".as_bytes()).is_err());
-  }
 
   #[test]
   fn ipv4_parse_test() {

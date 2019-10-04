@@ -120,7 +120,7 @@ pub fn hostname<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
   Ok((rest, (last_top, commit_num_domains)))
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Host<'a> {
   Hostname(&'a Binary, usize),
   Ipv4(Ipv4Addr),
