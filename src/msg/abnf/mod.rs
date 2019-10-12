@@ -15,15 +15,20 @@ pub(crate) fn map_byte<F>(input: &Binary, f: F) -> IResult<&Binary, Byte>
   )
 }
 
+named!(#[inline],
+  pub(crate) one_byte<Byte>,
+  map!(take!(1), |i| unsafe { *i.get_unchecked(0) })
+);
+
 macro_rules! byte (
   ($i:expr, $b:expr) => ( $crate::msg::abnf::map_byte($i, |i: u8| i == $b) );
 );
 
 macro_rules! one_of_byte(
-  ($i: expr, $($b:literal)|+) => (
+  ($i: expr, $($e:pat)|+) => (
     $crate::msg::abnf::map_byte($i, |i: u8| {
       match i {
-        $($b)|+ => true,
+        $($e)|+ => true,
         _ => false
       }
     })
@@ -105,7 +110,7 @@ macro_rules! at_least_one (
 macro_rules! many_times (
   ($input:expr, $submac:ident!( $($args:tt)* )) => ({
 
-    let mut rest = $input;
+    let mut rest: &Binary = $input;
     let mut len = 0usize;
 
     while let Ok((r, c)) =  $submac!(rest, $($args)*) {
@@ -113,11 +118,11 @@ macro_rules! many_times (
       len += $crate::msg::abnf::Consumed::consumed(&c);
     }
 
-    Ok((rest, &$input[..len]))
-
+    let res: &Binary = &$input[..len];
+    Ok((rest, res))
   });
   ($input:expr, $fn:expr) => ({
-    let mut rest = $input;
+    let mut rest: &Binary = $input;
     let mut len = 0usize;
 
     while let Ok((r, c)) = $fn(rest) {
@@ -125,7 +130,8 @@ macro_rules! many_times (
       len += $crate::msg::abnf::Consumed::consumed(&c);
     }
 
-    Ok((rest, &$input[..len]))
+    let res: &Binary = &$input[..len];
+    Ok((rest, res))
   });
 );
 

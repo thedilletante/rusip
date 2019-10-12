@@ -5,3 +5,4 @@ Cargo.lock
 *_generated.rs
 .idea
 .rfc
+rusty-tags.vi
