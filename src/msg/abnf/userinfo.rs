@@ -10,10 +10,36 @@ use nom::error::ErrorKind;
 use nom::Err::Error;
 use nom::IResult;
 
+pub enum Identity <'a> {
+  User(&'a Binary),
+  TelephoneSubscriber
+}
+
+pub struct UserInfo <'a> {
+  pub identity: Identity<'a>,
+  pub password: Option<&'a Binary>
+}
+
 // userinfo         =  ( user / telephone-subscriber ) [ ":" password ] "@"
 named!(#[inline],
-  pub userinfo<(&Binary, Option<&Binary>)>,
-  terminated!(tuple!(alt!(user | telephone_subscriber), opt!(preceded!(byte!(b':'), password))), byte!(b'@'))
+  pub userinfo<UserInfo>,
+  map!(
+    terminated!(
+      tuple!(
+        alt!(
+          user => { |u| Identity::User(u) }
+          |
+          telephone_subscriber => { |_| Identity::TelephoneSubscriber }
+        ),
+        opt!(preceded!(byte!(b':'), password))
+      ),
+      byte!(b'@')
+    ),
+    |(identity, password)| UserInfo {
+      identity,
+      password
+    }
+  )
 );
 
 // password         =  *( unreserved / escaped /
@@ -61,6 +87,7 @@ named!(#[inline],
   base_phone_number<u8>,
   call!(phonedigit)
 );
+
 // local-phone-number    = 1*(phonedigit / dtmf-digit /
 //                          pause-character) [isdn-subaddress]
 //                          [post-dial] area-specifier
@@ -328,10 +355,15 @@ named!(#[inline],
 mod tests {
 
     use super::dtmf_digit;
-    use super::DTMF;
+
+    macro_rules! parse_ok (
+      ( $fn:ident( $input:literal ) => $out:expr, $left:literal ) => {
+        assert_eq!($fn($input.as_bytes()), Ok(($left.as_bytes(), $out)));
+      };
+    );
 
     #[test]
     fn dtmf_digit_test() {
-        assert_eq!(dtmf_digit("*".as_bytes()), Ok(("".as_bytes(), DTMF{ digit: b'*'})));
+      parse_ok!(dtmf_digit("*") => b'*', "");
     }
 }
