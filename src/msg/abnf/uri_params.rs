@@ -40,7 +40,7 @@ named!(#[inline],
 // maddr-param      =  "maddr=" host
 #[inline]
 pub fn maddr_param<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
-  -> IResult<&'a Binary, Host<'a, 'b>> {
+  -> IResult<&'a Binary, (&'b mut [&'a Binary], Host<'a, 'b>)> {
   let (rest, _) = tag!(input, "maddr=")?;
   host(rest, domains)
 }
@@ -116,45 +116,45 @@ pub enum UriParam <'a, 'b> {
 //                    / ttl-param / maddr-param / lr-param / other-param
 #[inline]
 pub fn uri_parameter<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
-  -> IResult<&'a Binary, UriParam<'a, 'b>> {
+  -> IResult<&'a Binary, (&'b mut [&'a Binary], UriParam<'a, 'b>)> {
   alt!(input,
-    tag!("lr") => { |_| UriParam::Lr } |
-    transport_param => { |t| UriParam::Transport(t) } |
-    user_param => { |u| UriParam::User(u) } |
-    method_param => { |m| UriParam::Method(m) } |
-    ttl_param => { |t| UriParam::Ttl(t) } |
-    call!(maddr_param, domains) => { |h| UriParam::Maddr(h) } |
-    other_param => { |(h, v)| UriParam::Other(h, v) }
+    tag!("lr") => { |_| (domains, UriParam::Lr) } |
+    transport_param => { |t| (domains, UriParam::Transport(t)) } |
+    user_param => { |u| (domains, UriParam::User(u)) } |
+    method_param => { |m| (domains, UriParam::Method(m)) } |
+    ttl_param => { |t| (domains, UriParam::Ttl(t)) } |
+    other_param => { |(h, v)| (domains, UriParam::Other(h, v)) } |
+    call!(maddr_param, domains) => { |(unused, h)| (unused, UriParam::Maddr(h)) }
   )
 }
 
 // uri-parameters   =  *( ";" uri-parameter)
-#[inline]
-pub fn uri_parameters<'a, 'b, 'c>(
-  input: &'a Binary,
-  domains: &'b mut [&'a Binary],
-  params: &'c mut [UriParam<'a, 'b>]
-)
-  -> IResult<&'a Binary, &'c [UriParam<'a, 'b>]> {
-
-  let mut rest = input;
-  let mut i = 0usize;
-
-  while let Ok((r, _)) = byte!(rest, b';') {
-    if let Ok((r, v)) = uri_parameter(r, domains) {
-      if i >= params.len() {
-        return Err(Incomplete(Needed::Unknown));
-      }
-      params[i] = v;
-      i += 1;
-      rest = r;
-    } else {
-      break;
-    }
-  }
-
-  Ok((rest, &params[..i]))
-}
+//#[inline]
+//pub fn uri_parameters<'a, 'b, 'c>(
+//  input: &'a Binary,
+//  domains: &'b mut [&'a Binary],
+//  params: &'c mut [UriParam<'a, 'b>]
+//)
+//  -> IResult<&'a Binary, &'c [UriParam<'a, 'b>]> {
+//
+//  let mut rest = input;
+//  let mut i = 0usize;
+//
+//  while let Ok((r, _)) = byte!(rest, b';') {
+//    if let Ok((r, v)) = uri_parameter(r, domains) {
+//      if i >= params.len() {
+//        return Err(Incomplete(Needed::Unknown));
+//      }
+//      params[i] = v;
+//      i += 1;
+//      rest = r;
+//    } else {
+//      break;
+//    }
+//  }
+//
+//  Ok((rest, &params[..i]))
+//}
 
 //#[cfg(test)]
 //mod tests {

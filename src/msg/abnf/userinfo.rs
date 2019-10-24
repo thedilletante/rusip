@@ -9,6 +9,7 @@ use crate::msg::Binary;
 use nom::error::ErrorKind;
 use nom::Err::Error;
 use nom::IResult;
+use crate::msg::abnf::host::Hostname;
 
 pub enum Identity <'a> {
   User(&'a Binary),
@@ -208,7 +209,10 @@ named!(#[inline],
 pub fn service_provider<'a, 'b>(
     input: &'a Binary,
     domains: &'b mut [&'a Binary],
-) -> IResult<&'a Binary, (&'a Binary, usize)> {
+) -> IResult<
+        &'a Binary,
+        (&'b mut [&'a Binary], Hostname<'a, 'b>)
+    > {
     let (rest, _) = byte!(input, b';')?;
     let (rest, _) = provider_tag(rest)?;
     let (rest, _) = byte!(rest, b'=')?;
@@ -225,7 +229,10 @@ named!(#[inline],
 pub fn provider_hostname<'a, 'b>(
     input: &'a Binary,
     domains: &'b mut [&'a Binary],
-) -> IResult<&'a Binary, (&'a Binary, usize)> {
+) -> IResult<
+    &'a Binary,
+    (&'b mut [&'a Binary], Hostname<'a, 'b>)
+    > {
     hostname(input, domains)
 }
 

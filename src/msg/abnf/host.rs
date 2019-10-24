@@ -146,20 +146,20 @@ pub enum Host<'a, 'b> {
 #[inline]
 pub fn host<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
   -> IResult<&'a Binary, (&'b mut [&'a Binary], Host<'a, 'b>)> {
-  if let Ok((rest, (left, h))) = hostname(input, domains) {
-    return Ok((rest, (left, Host::Hostname(h))))
-  };
+  if let Ok((rest, ip)) = alt!(input,
+      ipv4address => {
+        |ip| Host::Ipv4(ip)
+      }
+      |
+      ipv6reference => {
+        |ip| Host::Ipv6(ip)
+      }
+    ) {
+    return Ok((rest, (domains, ip)));
+  }
 
-
-  alt!(input,
-    ipv4address => {
-      |v4| (&mut domains, Host::Ipv4(v4))
-    }
-    |
-    ipv6reference => {
-      |v6| (&mut domains, Host::Ipv6(v6))
-    }
-  )
+  let (rest, (unused, h)) = hostname(input, domains)?;
+  Ok((rest, (unused, Host::Hostname(h))))
 }
 
 // port             =  1*DIGIT
@@ -211,8 +211,7 @@ pub fn hostport<'a, 'b>(input: &'a Binary, domains: &'b mut [&'a Binary])
 
 #[cfg(test)]
 mod tests {
-  use super::{domainlabel, toplabel, hostname};
-  //, host, Host, port, hostport};
+  use super::{domainlabel, toplabel, hostname, host, Host, port, hostport};
   use nom::Err as Error;
   use nom::error::ErrorKind::{Verify, Digit, Complete};
   use nom::Needed;
@@ -330,28 +329,28 @@ mod tests {
 //     host_test!("ringcentral.com" makes Host::Hostname("com".as_bytes(), &["ringcentral".as_bytes()]), "");
 //     host_test!("[fa:2001:db8::9:01]" makes Host::Ipv6(Ipv6Addr::from_str("fa:2001:db8::9:01").unwrap()), "");
 //   }
-// 
-//   macro_rules! port_test {
-//     ( $input:literal makes $expected:expr, $left:expr) => {
-//       parser_ok!( $input => port => $expected, $left );
-//     };
-//     ( $input:literal fails $error:expr, $left:expr ) => {
-//       parser_fail!($input => port |= Error::Error(($left.as_bytes(), $error)))
-//     };
-//   }
-// 
-//   #[test]
-//   fn port_test() {
-//     port_test!("1" makes 1, "");
-//     port_test!("1a" makes 1, "a");
-//     port_test!("5070" makes 5070, "");
-//     port_test!("20101- " makes 20101, "- ");
-// 
-//     port_test!("" fails Complete, "");
-//     port_test!("0" fails Digit, "");
-//     port_test!("a" fails Verify, "a");
-//     port_test!("99999" fails Digit, "9");
-//   }
+
+   macro_rules! port_test {
+     ( $input:literal makes $expected:expr, $left:expr) => {
+       parser_ok!( $input => port => $expected, $left );
+     };
+     ( $input:literal fails $error:expr, $left:expr ) => {
+       parser_fail!($input => port |= Error::Error(($left.as_bytes(), $error)))
+     };
+   }
+
+   #[test]
+   fn port_test() {
+     port_test!("1" makes 1, "");
+     port_test!("1a" makes 1, "a");
+     port_test!("5070" makes 5070, "");
+     port_test!("20101- " makes 20101, "- ");
+
+     port_test!("" fails Complete, "");
+     port_test!("0" fails Digit, "");
+     port_test!("a" fails Verify, "a");
+     port_test!("99999" fails Digit, "9");
+   }
 // 
 //   macro_rules! hostport_test {
 //     ( $input:literal makes $host:literal,$domains:expr, $left:literal) => {
